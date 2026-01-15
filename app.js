@@ -1,4 +1,4 @@
-const STORAGE_KEY = "rkContactsV1";
+const STORAGE_KEY = "ContactsV1";
 
 const fileInput = document.getElementById("fileInput");
 const clearDataBtn = document.getElementById("clearDataBtn");
