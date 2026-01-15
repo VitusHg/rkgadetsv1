@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RK Telefonliste</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#b71c1c" />
+
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <meta name="description" content="Offline Telefonliste für RK-Dienststelle Hartberg" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>RK Telefonliste</h1>
+    <p class="subtitle">Telefonliste lokal laden und anrufen</p>
+  </header>
+
+  <main>
+    <section class="import-section">
+      <h2>Telefonliste laden</h2>
+      <p>
+        Wähle hier deine <strong>CSV-Datei</strong> mit der Telefonliste aus.
+        Die Daten bleiben nur auf diesem Gerät und werden nicht hochgeladen.
+      </p>
+      <label class="file-label">
+        <input type="file" id="fileInput" accept=".csv,text/csv" />
+        <span>Datei auswählen…</span>
+      </label>
+      <div class="import-actions">
+        <button id="clearDataBtn" class="danger">Gespeicherte Daten löschen</button>
+        <span id="status" class="status"></span>
+      </div>
+    </section>
+
+    <section class="search-section">
+      <h2>Suche</h2>
+      <input
+        type="search"
+        id="searchInput"
+        placeholder="Name oder Telefonnummer suchen…"
+        autocomplete="off"
+      />
+      <div id="countInfo" class="count-info"></div>
+    </section>
+
+    <section class="contacts-section">
+      <h2>Kontakte</h2>
+      <div id="contactsContainer" class="contacts-container">
+        <p class="hint">
+          Noch keine Daten geladen. Wähle oben eine CSV-Datei aus.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <small>Alle Daten bleiben lokal im Browser gespeichert.</small>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
