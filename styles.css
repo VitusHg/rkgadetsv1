@@ -161,8 +161,33 @@ button.danger:hover {
   margin-top: 0.4rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
+
+.phone-buttons a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+
+  font-size: 0.85rem;
+  font-weight: 500;
+
+  text-decoration: none;
+  border: 1px solid var(--rk-red);
+  color: var(--rk-red);
+
+  /* wichtig für lange Nummern */
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.phone-buttons a:active {
+  background: #ffebee;
+}
+
 
 .phone-buttons a {
   display: inline-flex;
