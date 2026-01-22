@@ -1,4 +1,4 @@
-const STORAGE_KEY = "ContactsV1";
+const STORAGE_KEY = "ContactsV3_name_mobilonly";
 
 const fileInput = document.getElementById("fileInput");
 const clearDataBtn = document.getElementById("clearDataBtn");
@@ -9,12 +9,13 @@ const countInfo = document.getElementById("countInfo");
 
 let contacts = [];
 
-// Beim Laden: aus localStorage ziehen
+// ===== Startup =====
 window.addEventListener("DOMContentLoaded", () => {
+  // Aus localStorage laden
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
     try {
-      contacts = JSON.parse(saved);
+      contacts = JSON.parse(saved) || [];
       renderContacts();
       setStatus("Gespeicherte Liste geladen.");
     } catch (e) {
@@ -23,29 +24,36 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Service Worker registrieren (für PWA/offline)
+  // Service Worker registrieren (Offline/PWA)
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./service-worker.js").catch(console.error);
   }
 });
 
+// ===== Events =====
 fileInput.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
   const reader = new FileReader();
+
   reader.onload = (e) => {
     const text = String(e.target?.result || "");
     try {
       contacts = parseCsv(text);
+
+      // Nur minimal nötige Daten speichern
       localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+
       renderContacts();
       setStatus(`Liste geladen (${contacts.length} Einträge).`);
     } catch (err) {
       console.error(err);
-      setStatus("Fehler beim Einlesen der CSV-Datei.");
+      setStatus("Fehler beim Einlesen der CSV-Datei. Prüfe Spaltennamen & Format.");
     }
   };
+
+  // UTF-8 ist wichtig für Umlaute
   reader.readAsText(file, "utf-8");
 });
 
@@ -62,11 +70,47 @@ searchInput.addEventListener("input", () => {
   renderContacts();
 });
 
+// ===== Helpers =====
 function setStatus(msg) {
   statusEl.textContent = msg;
 }
 
-// Sehr einfache CSV-Parsing-Funktion
+/**
+ * Normalisiert Telefonnummern:
+ * - behält nur Ziffern und '+'
+ * - "00..." -> "+..."
+ * - "4366..." -> "+4366..."
+ * - "+4366..." bleibt
+ */
+function normalizePhone(phoneRaw) {
+  if (!phoneRaw) return "";
+
+  let p = String(phoneRaw).trim();
+
+  // Nur Ziffern und + behalten
+  p = p.replace(/[^\d+]/g, "");
+
+  if (!p) return "";
+
+  if (p.startsWith("+")) return p;
+  if (p.startsWith("00")) return "+" + p.slice(2);
+
+  // Wenn nur Ziffern (z.B. 4366...) -> + davor
+  if (/^\d+$/.test(p)) return "+" + p;
+
+  return p;
+}
+
+/**
+ * CSV Parser:
+ * Erwartet Header mit:
+ * - Name
+ * - Mobil 1
+ * - Mobil 2
+ *
+ * Trenner automatisch: ; oder ,
+ * Achtung: sehr “pragmatisch” (keine komplexen quoted CSV Edgecases).
+ */
 function parseCsv(text) {
   const lines = text
     .split(/\r?\n/)
@@ -75,41 +119,47 @@ function parseCsv(text) {
 
   if (lines.length === 0) return [];
 
-  const firstLine = lines[0];
-  const delimiter = firstLine.includes(";") ? ";" : ",";
+  const headerLine = lines[0];
+  const delimiter = headerLine.includes(";") ? ";" : ",";
 
-  const headers = firstLine.split(delimiter).map((h) => h.trim().toLowerCase());
+  const headers = headerLine
+    .split(delimiter)
+    .map((h) => h.trim().toLowerCase());
 
-  const idxName = headers.findIndex((h) => h.startsWith("name"));
+  // Spalten finden (deine CSV: Name, Mobil 1, Mobil 2)
+  const idxName = headers.findIndex((h) => h === "name" || h.startsWith("name"));
   const idxMobil1 = headers.findIndex((h) => h.includes("mobil 1") || h.includes("mobil1"));
   const idxMobil2 = headers.findIndex((h) => h.includes("mobil 2") || h.includes("mobil2"));
-  const idxEmail1 = headers.findIndex((h) => h.includes("e-mail 1") || h.includes("email 1"));
-  const idxEmail2 = headers.findIndex((h) => h.includes("e-mail 2") || h.includes("email 2"));
+
+  if (idxName === -1) throw new Error("Spalte 'Name' nicht gefunden.");
+  if (idxMobil1 === -1 && idxMobil2 === -1) throw new Error("Keine Mobil-Spalten gefunden.");
 
   const data = [];
 
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(delimiter).map((c) => c.trim());
-    if (!cols[idxName] || cols[idxName].length === 0) continue;
 
-    const entry = {
-      name: cols[idxName] || "",
-      mobil1: idxMobil1 >= 0 ? cols[idxMobil1] || "" : "",
-      mobil2: idxMobil2 >= 0 ? cols[idxMobil2] || "" : "",
-      email1: idxEmail1 >= 0 ? cols[idxEmail1] || "" : "",
-      email2: idxEmail2 >= 0 ? cols[idxEmail2] || "" : "",
-    };
+    const name = cols[idxName] || "";
+    if (!name) continue;
 
-    data.push(entry);
+    const mobil1Raw = idxMobil1 >= 0 ? (cols[idxMobil1] || "") : "";
+    const mobil2Raw = idxMobil2 >= 0 ? (cols[idxMobil2] || "") : "";
+
+    const mobil1 = normalizePhone(mobil1Raw);
+    const mobil2 = normalizePhone(mobil2Raw);
+
+    // Nur speichern was wir wirklich brauchen
+    data.push({
+      name,
+      mobil1,
+      mobil2
+    });
   }
 
   return data;
 }
 
-function normalizePhone(phone) {
-  return phone.replace(/\s+/g, "");
-}
-
+// ===== UI Rendering =====
 function renderContacts() {
   contactsContainer.innerHTML = "";
 
@@ -123,13 +173,15 @@ function renderContacts() {
   }
 
   const query = searchInput.value.trim().toLowerCase();
+
   const filtered = contacts.filter((c) => {
     if (!query) return true;
-    return (
-      c.name.toLowerCase().includes(query) ||
-      c.mobil1.toLowerCase().includes(query) ||
-      c.mobil2.toLowerCase().includes(query)
-    );
+
+    const n = (c.name || "").toLowerCase();
+    const m1 = (c.mobil1 || "").toLowerCase();
+    const m2 = (c.mobil2 || "").toLowerCase();
+
+    return n.includes(query) || m1.includes(query) || m2.includes(query);
   });
 
   countInfo.textContent = `${filtered.length} von ${contacts.length} Kontakten angezeigt`;
@@ -148,9 +200,8 @@ function renderContacts() {
     const extraEl = document.createElement("div");
     extraEl.className = "contact-extra";
 
-    if (c.mobil1 && !c.mobil2) extraEl.textContent = c.mobil1;
-    else if (c.mobil1 && c.mobil2) extraEl.textContent = `${c.mobil1} · ${c.mobil2}`;
-    else extraEl.textContent = "";
+    // Optional: rechts klein die erste Nummer anzeigen (wenn vorhanden)
+    extraEl.textContent = c.mobil1 || "";
 
     header.appendChild(nameEl);
     header.appendChild(extraEl);
@@ -159,37 +210,30 @@ function renderContacts() {
     const phoneButtons = document.createElement("div");
     phoneButtons.className = "phone-buttons";
 
-    if (c.mobil1) {
+    const p1 = c.mobil1 || "";
+    const p2 = c.mobil2 || "";
+
+    if (p1) {
       const link1 = document.createElement("a");
-      link1.href = "tel:" + normalizePhone(c.mobil1);
-      link1.textContent = "Mobil 1";
+      link1.href = "tel:" + p1;
+      link1.textContent = p1; // <- Nummer anzeigen
       phoneButtons.appendChild(link1);
     }
 
-    if (c.mobil2 && c.mobil2 !== c.mobil1) {
+    if (p2 && p2 !== p1) {
       const link2 = document.createElement("a");
-      link2.href = "tel:" + normalizePhone(c.mobil2);
-      link2.textContent = "Mobil 2";
+      link2.href = "tel:" + p2;
+      link2.textContent = p2; // <- Nummer anzeigen
       phoneButtons.appendChild(link2);
     }
 
     if (phoneButtons.childElementCount > 0) {
       card.appendChild(phoneButtons);
-    }
-
-    const emails = [];
-    if (c.email1) emails.push(c.email1);
-    if (c.email2 && c.email2 !== c.email1) emails.push(c.email2);
-
-    if (emails.length > 0) {
-      const emailEl = document.createElement("div");
-      emailEl.className = "email-list";
-      emails.forEach((mail) => {
-        const span = document.createElement("span");
-        span.textContent = mail;
-        emailEl.appendChild(span);
-      });
-      card.appendChild(emailEl);
+    } else {
+      const hint = document.createElement("div");
+      hint.className = "email-list"; // reuse: kleine graue Schrift
+      hint.textContent = "Keine Nummer vorhanden";
+      card.appendChild(hint);
     }
 
     contactsContainer.appendChild(card);
