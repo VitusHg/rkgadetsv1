@@ -189,18 +189,6 @@ button.danger:hover {
 }
 
 
-.phone-buttons a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.4rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  text-decoration: none;
-  border: 1px solid var(--rk-red);
-  color: var(--rk-red);
-}
-
 .phone-buttons a:hover {
   background: #ffebee;
 }
