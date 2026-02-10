@@ -76,28 +76,60 @@ function normalizePhone(raw) {
   return p;
 }
 
+function parseCsvLine(line, delimiter) {
+  const cells = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === delimiter && !inQuotes) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
 function parseCsv(text) {
-  const lines = text
+  const cleaned = text.replace(/^\uFEFF/, "");
+  const lines = cleaned
     .split(/\r?\n/)
-    .map(l => l.trim())
+    .map((l) => l.trim())
     .filter(Boolean);
 
   if (!lines.length) return [];
 
   const delimiter = lines[0].includes(";") ? ";" : ",";
-  const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+  const headers = parseCsvLine(lines[0], delimiter).map((h) => h.toLowerCase());
 
-  const idxName = headers.findIndex(h => h.startsWith("name"));
-  const idxM1 = headers.findIndex(h => h.includes("mobil 1") || h.includes("mobil1"));
-  const idxM2 = headers.findIndex(h => h.includes("mobil 2") || h.includes("mobil2"));
+  const idxName = headers.findIndex((h) => h.startsWith("name"));
+  const idxM1 = headers.findIndex((h) => h.includes("mobil 1") || h.includes("mobil1"));
+  const idxM2 = headers.findIndex((h) => h.includes("mobil 2") || h.includes("mobil2"));
 
   if (idxName === -1) throw new Error("Name fehlt");
 
   const data = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(delimiter).map(c => c.trim());
-    const name = cols[idxName];
+    const cols = parseCsvLine(lines[i], delimiter);
+    const name = cols[idxName]?.trim();
     if (!name) continue;
 
     const m1 = idxM1 >= 0 ? normalizePhone(cols[idxM1]) : "";
@@ -114,24 +146,28 @@ function renderContacts() {
   contactsContainer.innerHTML = "";
 
   if (!contacts.length) {
-    contactsContainer.innerHTML =
-      `<p class="hint">Noch keine Daten geladen.</p>`;
+    contactsContainer.innerHTML = `<p class="hint">Noch keine Daten geladen.</p>`;
     countInfo.textContent = "";
     return;
   }
 
   const q = searchInput.value.toLowerCase().trim();
-  const filtered = contacts.filter(c =>
-    !q ||
-    c.name.toLowerCase().includes(q) ||
-    c.mobil1.includes(q) ||
-    c.mobil2.includes(q)
+  const filtered = contacts.filter(
+    (c) =>
+      !q ||
+      c.name.toLowerCase().includes(q) ||
+      c.mobil1.includes(q) ||
+      c.mobil2.includes(q)
   );
 
-  countInfo.textContent =
-    `${filtered.length} von ${contacts.length} Kontakten angezeigt`;
+  countInfo.textContent = `${filtered.length} von ${contacts.length} Kontakten angezeigt`;
 
-  filtered.forEach(c => {
+  if (!filtered.length) {
+    contactsContainer.innerHTML = `<p class="hint">Keine Treffer für „${q}“.</p>`;
+    return;
+  }
+
+  filtered.forEach((c) => {
     const card = document.createElement("article");
     card.className = "contact-card";
 
@@ -148,16 +184,11 @@ function renderContacts() {
     const phoneButtons = document.createElement("div");
     phoneButtons.className = "phone-buttons";
 
-
     if (c.mobil1) {
       phoneButtons.appendChild(makePhoneButton(c.mobil1));
     }
 
     if (c.mobil2 && c.mobil2 !== c.mobil1) {
-      phoneButtons.appendChild(makePhoneButton(c.mobil2));
-    }
-
-    if (!c.mobil1 && c.mobil2) {
       phoneButtons.appendChild(makePhoneButton(c.mobil2));
     }
 
