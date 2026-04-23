@@ -22,8 +22,8 @@
     <section class="import-section">
       <h2>Telefonliste laden</h2>
       <label class="file-label">
-        <input type="file" id="fileInput" accept=".csv,text/csv" />
-        <span>CSV auswählen…</span>
+        <input type="file" id="fileInput" accept=".csv,text/csv,.pdf,application/pdf" />
+        <span>CSV oder PDF auswählen…</span>
       </label>
 
       <div class="import-actions">
@@ -48,12 +48,13 @@
       <h2>Kontakte</h2>
       <div id="contactsContainer" class="contacts-container">
         <p class="hint">
-          Noch keine Daten geladen. Wähle oben eine CSV-Datei aus.
+          Noch keine Daten geladen. Wähle oben eine CSV- oder PDF-Datei aus.
         </p>
       </div>
     </section>
   </main>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.min.js"></script>
   <script src="app.js" defer></script>
 </body>
 </html>
