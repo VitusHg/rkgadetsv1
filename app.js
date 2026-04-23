@@ -32,19 +32,10 @@ fileInput.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      contacts = parseCsv(String(e.target?.result || ""));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
-      renderContacts();
-      setStatus(`Liste geladen (${contacts.length} Einträge).`);
-    } catch {
-      setStatus("Fehler beim Einlesen der CSV-Datei.");
-    }
-  };
-
-  reader.readAsText(file, "utf-8"); // wichtig für Umlaute
+  importContactsFromFile(file).catch((err) => {
+    console.error(err);
+    setStatus("Datei konnte nicht verarbeitet werden.");
+  });
 });
 
 clearDataBtn.addEventListener("click", () => {
@@ -139,6 +130,140 @@ function parseCsv(text) {
   }
 
   return data;
+}
+
+function looksLikePdf(file) {
+  const lowerName = file.name?.toLowerCase() || "";
+  return file.type === "application/pdf" || lowerName.endsWith(".pdf");
+}
+
+function looksLikeCsv(file) {
+  const lowerName = file.name?.toLowerCase() || "";
+  return file.type.includes("csv") || lowerName.endsWith(".csv");
+}
+
+async function importContactsFromFile(file) {
+  if (looksLikePdf(file)) {
+    contacts = await parsePdf(file);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+    renderContacts();
+    setStatus(
+      `PDF geladen (${contacts.length} Einträge). Wenn etwas fehlt, bitte Beispiel-PDF teilen.`
+    );
+    return;
+  }
+
+  if (!looksLikeCsv(file)) {
+    setStatus("Bitte CSV oder PDF auswählen.");
+    return;
+  }
+
+  const text = await readFileAsText(file);
+  contacts = parseCsv(text);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+  renderContacts();
+  setStatus(`CSV geladen (${contacts.length} Einträge).`);
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(String(e.target?.result || ""));
+    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
+    reader.readAsText(file, "utf-8");
+  });
+}
+
+async function parsePdf(file) {
+  if (!window.pdfjsLib) {
+    throw new Error("PDF.js nicht geladen.");
+  }
+
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.js";
+
+  const bytes = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+  const lines = [];
+
+  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+    const page = await pdf.getPage(pageNo);
+    const text = await page.getTextContent();
+    const pageLines = splitTextItemsIntoLines(text.items || []);
+    lines.push(...pageLines);
+  }
+
+  const parsed = parseContactsFromPdfLines(lines);
+  if (!parsed.length) {
+    throw new Error("Keine Kontakte im PDF gefunden.");
+  }
+
+  return parsed;
+}
+
+function splitTextItemsIntoLines(items) {
+  const grouped = new Map();
+  const precision = 2;
+
+  items.forEach((item) => {
+    const y = Number(item.transform?.[5] || 0).toFixed(precision);
+    if (!grouped.has(y)) grouped.set(y, []);
+    grouped.get(y).push(item);
+  });
+
+  const yValues = [...grouped.keys()].sort((a, b) => Number(b) - Number(a));
+  return yValues.map((y) => {
+    const segments = grouped
+      .get(y)
+      .slice()
+      .sort((a, b) => (a.transform?.[4] || 0) - (b.transform?.[4] || 0))
+      .map((s) => s.str || "")
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return segments;
+  });
+}
+
+function parseContactsFromPdfLines(lines) {
+  const contactsByName = new Map();
+  const phonePattern = /(?:\+|00)?\d[\d\s()./-]{6,}\d/g;
+
+  lines.forEach((line) => {
+    if (!line) return;
+    const lower = line.toLowerCase();
+    if (lower.includes("name") && lower.includes("mobil")) return;
+
+    const matches = [...line.matchAll(phonePattern)].map((m) => m[0]);
+    if (!matches.length) return;
+
+    const phones = matches.map(normalizePhone).filter(Boolean);
+    if (!phones.length) return;
+
+    const name = line
+      .replace(phonePattern, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!name) return;
+
+    if (!contactsByName.has(name)) {
+      contactsByName.set(name, new Set());
+    }
+
+    const set = contactsByName.get(name);
+    phones.forEach((p) => set.add(p));
+  });
+
+  return [...contactsByName.entries()].map(([name, phoneSet]) => {
+    const phoneList = [...phoneSet];
+    return {
+      name,
+      mobil1: phoneList[0] || "",
+      mobil2: phoneList[1] || "",
+    };
+  });
 }
 
 // ===== UI =====
