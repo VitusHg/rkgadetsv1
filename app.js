@@ -43,8 +43,7 @@ fileInput.addEventListener("change", (event) => {
       setStatus("Fehler beim Einlesen der CSV-Datei.");
     }
   };
-
-  reader.readAsText(file, "utf-8"); // wichtig für Umlaute
+  reader.readAsText(file, "utf-8");
 });
 
 clearDataBtn.addEventListener("click", () => {
