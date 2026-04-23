@@ -160,40 +160,43 @@ button.danger:hover {
 .phone-buttons {
   margin-top: 0.4rem;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.4rem;
 }
 
-.phone-buttons a,
-.phone-buttons button {
+.phone-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.phone-number {
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.phone-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.icon-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--rk-red);
+  background: #fff;
+  color: var(--rk-red);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-
-  padding: 0.45rem 0.8rem;
-  border-radius: 999px;
-
-  font-size: 0.85rem;
-  font-weight: 500;
-
-  text-decoration: none;
-  border: 1px solid var(--rk-red);
-  color: var(--rk-red);
-  background: #fff;
-
-  /* wichtig für lange Nummern */
-  white-space: nowrap;
-  word-break: keep-all;
+  font-size: 1rem;
+  padding: 0;
 }
 
-.phone-buttons a:active,
-.phone-buttons button:active {
-  background: #ffebee;
-}
-
-
-.phone-buttons a:hover,
-.phone-buttons button:hover {
+.icon-btn:hover,
+.icon-btn:active {
   background: #ffebee;
 }
 

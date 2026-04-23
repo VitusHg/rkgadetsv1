@@ -32,18 +32,16 @@ fileInput.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      contacts = parseCsv(String(e.target?.result || ""));
+  readCsvFileAsText(file)
+    .then((text) => {
+      contacts = parseCsv(text);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
       renderContacts();
       setStatus(`Liste geladen (${contacts.length} Einträge).`);
-    } catch {
+    })
+    .catch(() => {
       setStatus("Fehler beim Einlesen der CSV-Datei.");
-    }
-  };
-  reader.readAsText(file, "utf-8");
+    });
 });
 
 clearDataBtn.addEventListener("click", () => {
@@ -167,6 +165,14 @@ function detectDelimiter(headerLine) {
   return best;
 }
 
+async function readCsvFileAsText(file) {
+  const bytes = await file.arrayBuffer();
+  const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  if (!utf8.includes("�")) return utf8;
+
+  return new TextDecoder("windows-1252").decode(bytes);
+}
+
 // ===== UI =====
 function renderContacts() {
   contactsContainer.innerHTML = "";
@@ -232,27 +238,40 @@ function renderContacts() {
 }
 
 function makePhoneButton(number) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.textContent = number;
-  btn.addEventListener("click", () => handlePhoneAction(number));
-  return btn;
-}
+  const row = document.createElement("div");
+  row.className = "phone-row";
 
-function handlePhoneAction(number) {
-  const choice = window.prompt(
-    `Aktion für ${number}:\n1 = Anrufen\n2 = WhatsApp`,
-    "1"
-  );
-  if (choice === null) return;
+  const text = document.createElement("span");
+  text.className = "phone-number";
+  text.textContent = number;
 
-  if (choice.trim() === "2") {
+  const actions = document.createElement("div");
+  actions.className = "phone-actions";
+
+  const callBtn = document.createElement("button");
+  callBtn.type = "button";
+  callBtn.className = "icon-btn";
+  callBtn.title = "Anrufen";
+  callBtn.setAttribute("aria-label", `Anrufen: ${number}`);
+  callBtn.textContent = "📞";
+  callBtn.addEventListener("click", () => {
+    window.location.href = "tel:" + number;
+  });
+
+  const waBtn = document.createElement("button");
+  waBtn.type = "button";
+  waBtn.className = "icon-btn";
+  waBtn.title = "WhatsApp";
+  waBtn.setAttribute("aria-label", `WhatsApp: ${number}`);
+  waBtn.textContent = "💬";
+  waBtn.addEventListener("click", () => {
     const waNumber = toWhatsAppNumber(number);
     window.open(`https://wa.me/${waNumber}`, "_blank", "noopener");
-    return;
-  }
+  });
 
-  window.location.href = "tel:" + number;
+  actions.append(callBtn, waBtn);
+  row.append(text, actions);
+  return row;
 }
 
 function toWhatsAppNumber(raw) {
