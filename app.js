@@ -43,8 +43,7 @@ fileInput.addEventListener("change", (event) => {
       setStatus("Fehler beim Einlesen der CSV-Datei.");
     }
   };
-
-  reader.readAsText(file, "utf-8"); // wichtig für Umlaute
+  reader.readAsText(file, "utf-8");
 });
 
 clearDataBtn.addEventListener("click", () => {
@@ -74,6 +73,15 @@ function normalizePhone(raw) {
   if (/^\d+$/.test(p)) return "+" + p;
 
   return p;
+}
+
+function normalizeName(raw) {
+  if (!raw) return "";
+
+  return String(raw)
+    .replace(/\s*\([^)]*\)/g, "") // entfernt " (..)" inkl. Leerzeichen davor
+    .replace(/,.*$/, "") // entfernt alles ab Beistrich inkl. Beistrich
+    .trim();
 }
 
 function parseCsvLine(line, delimiter) {
@@ -126,14 +134,18 @@ function parseCsv(text) {
   if (idxName === -1) throw new Error("Name fehlt");
 
   const data = [];
+  const seen = new Set();
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCsvLine(lines[i], delimiter);
-    const name = cols[idxName]?.trim();
+    const name = normalizeName(cols[idxName]);
     if (!name) continue;
 
     const m1 = idxM1 >= 0 ? normalizePhone(cols[idxM1]) : "";
     const m2 = idxM2 >= 0 ? normalizePhone(cols[idxM2]) : "";
+    const dedupeKey = `${name}|${m1}|${m2}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
 
     data.push({ name, mobil1: m1, mobil2: m2 });
   }
