@@ -32,10 +32,18 @@ fileInput.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  importContactsFromFile(file).catch((err) => {
-    console.error(err);
-    setStatus("Datei konnte nicht verarbeitet werden.");
-  });
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      contacts = parseCsv(String(e.target?.result || ""));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+      renderContacts();
+      setStatus(`Liste geladen (${contacts.length} Einträge).`);
+    } catch {
+      setStatus("Fehler beim Einlesen der CSV-Datei.");
+    }
+  };
+  reader.readAsText(file, "utf-8");
 });
 
 clearDataBtn.addEventListener("click", () => {
