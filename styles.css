@@ -164,7 +164,8 @@ button.danger:hover {
   gap: 0.4rem;
 }
 
-.phone-buttons a {
+.phone-buttons a,
+.phone-buttons button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -178,18 +179,21 @@ button.danger:hover {
   text-decoration: none;
   border: 1px solid var(--rk-red);
   color: var(--rk-red);
+  background: #fff;
 
   /* wichtig für lange Nummern */
   white-space: nowrap;
   word-break: keep-all;
 }
 
-.phone-buttons a:active {
+.phone-buttons a:active,
+.phone-buttons button:active {
   background: #ffebee;
 }
 
 
-.phone-buttons a:hover {
+.phone-buttons a:hover,
+.phone-buttons button:hover {
   background: #ffebee;
 }
 

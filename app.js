@@ -124,22 +124,20 @@ function parseCsv(text) {
 
   if (!lines.length) return [];
 
-  const delimiter = lines[0].includes(";") ? ";" : ",";
+  const delimiter = detectDelimiter(lines[0]);
   const headers = parseCsvLine(lines[0], delimiter).map((h) => h.toLowerCase());
 
   const idxName = headers.findIndex((h) => h.startsWith("name"));
   const idxM1 = headers.findIndex((h) => h.includes("mobil 1") || h.includes("mobil1"));
   const idxM2 = headers.findIndex((h) => h.includes("mobil 2") || h.includes("mobil2"));
-
-  if (idxName === -1) throw new Error("Name fehlt");
+  const resolvedNameIdx = idxName >= 0 ? idxName : 0;
 
   const data = [];
   const seen = new Set();
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCsvLine(lines[i], delimiter);
-    const name = normalizeName(cols[idxName]);
-    if (!name) continue;
+    const name = normalizeName(cols[resolvedNameIdx]) || "Unbekannt";
 
     const m1 = idxM1 >= 0 ? normalizePhone(cols[idxM1]) : "";
     const m2 = idxM2 >= 0 ? normalizePhone(cols[idxM2]) : "";
@@ -153,138 +151,20 @@ function parseCsv(text) {
   return data;
 }
 
-function looksLikePdf(file) {
-  const lowerName = file.name?.toLowerCase() || "";
-  return file.type === "application/pdf" || lowerName.endsWith(".pdf");
-}
+function detectDelimiter(headerLine) {
+  const candidates = [";", ",", "\t"];
+  let best = ";";
+  let highest = -1;
 
-function looksLikeCsv(file) {
-  const lowerName = file.name?.toLowerCase() || "";
-  return file.type.includes("csv") || lowerName.endsWith(".csv");
-}
-
-async function importContactsFromFile(file) {
-  if (looksLikePdf(file)) {
-    contacts = await parsePdf(file);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
-    renderContacts();
-    setStatus(
-      `PDF geladen (${contacts.length} Einträge). Wenn etwas fehlt, bitte Beispiel-PDF teilen.`
-    );
-    return;
-  }
-
-  if (!looksLikeCsv(file)) {
-    setStatus("Bitte CSV oder PDF auswählen.");
-    return;
-  }
-
-  const text = await readFileAsText(file);
-  contacts = parseCsv(text);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
-  renderContacts();
-  setStatus(`CSV geladen (${contacts.length} Einträge).`);
-}
-
-function readFileAsText(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(String(e.target?.result || ""));
-    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
-    reader.readAsText(file, "utf-8");
-  });
-}
-
-async function parsePdf(file) {
-  if (!window.pdfjsLib) {
-    throw new Error("PDF.js nicht geladen.");
-  }
-
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.3.136/pdf.worker.min.js";
-
-  const bytes = await file.arrayBuffer();
-  const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
-  const lines = [];
-
-  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
-    const page = await pdf.getPage(pageNo);
-    const text = await page.getTextContent();
-    const pageLines = splitTextItemsIntoLines(text.items || []);
-    lines.push(...pageLines);
-  }
-
-  const parsed = parseContactsFromPdfLines(lines);
-  if (!parsed.length) {
-    throw new Error("Keine Kontakte im PDF gefunden.");
-  }
-
-  return parsed;
-}
-
-function splitTextItemsIntoLines(items) {
-  const grouped = new Map();
-  const precision = 2;
-
-  items.forEach((item) => {
-    const y = Number(item.transform?.[5] || 0).toFixed(precision);
-    if (!grouped.has(y)) grouped.set(y, []);
-    grouped.get(y).push(item);
-  });
-
-  const yValues = [...grouped.keys()].sort((a, b) => Number(b) - Number(a));
-  return yValues.map((y) => {
-    const segments = grouped
-      .get(y)
-      .slice()
-      .sort((a, b) => (a.transform?.[4] || 0) - (b.transform?.[4] || 0))
-      .map((s) => s.str || "")
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return segments;
-  });
-}
-
-function parseContactsFromPdfLines(lines) {
-  const contactsByName = new Map();
-  const phonePattern = /(?:\+|00)?\d[\d\s()./-]{6,}\d/g;
-
-  lines.forEach((line) => {
-    if (!line) return;
-    const lower = line.toLowerCase();
-    if (lower.includes("name") && lower.includes("mobil")) return;
-
-    const matches = [...line.matchAll(phonePattern)].map((m) => m[0]);
-    if (!matches.length) return;
-
-    const phones = matches.map(normalizePhone).filter(Boolean);
-    if (!phones.length) return;
-
-    const name = line
-      .replace(phonePattern, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (!name) return;
-
-    if (!contactsByName.has(name)) {
-      contactsByName.set(name, new Set());
+  candidates.forEach((delimiter) => {
+    const count = headerLine.split(delimiter).length - 1;
+    if (count > highest) {
+      highest = count;
+      best = delimiter;
     }
-
-    const set = contactsByName.get(name);
-    phones.forEach((p) => set.add(p));
   });
 
-  return [...contactsByName.entries()].map(([name, phoneSet]) => {
-    const phoneList = [...phoneSet];
-    return {
-      name,
-      mobil1: phoneList[0] || "",
-      mobil2: phoneList[1] || "",
-    };
-  });
+  return best;
 }
 
 // ===== UI =====
@@ -352,8 +232,29 @@ function renderContacts() {
 }
 
 function makePhoneButton(number) {
-  const a = document.createElement("a");
-  a.href = "tel:" + number;
-  a.textContent = number;
-  return a;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = number;
+  btn.addEventListener("click", () => handlePhoneAction(number));
+  return btn;
+}
+
+function handlePhoneAction(number) {
+  const choice = window.prompt(
+    `Aktion für ${number}:\n1 = Anrufen\n2 = WhatsApp`,
+    "1"
+  );
+  if (choice === null) return;
+
+  if (choice.trim() === "2") {
+    const waNumber = toWhatsAppNumber(number);
+    window.open(`https://wa.me/${waNumber}`, "_blank", "noopener");
+    return;
+  }
+
+  window.location.href = "tel:" + number;
+}
+
+function toWhatsAppNumber(raw) {
+  return String(raw).replace(/[^\d]/g, "");
 }
