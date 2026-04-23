@@ -43,8 +43,7 @@ fileInput.addEventListener("change", (event) => {
       setStatus("Fehler beim Einlesen der CSV-Datei.");
     }
   };
-
-  reader.readAsText(file, "utf-8"); // wichtig für Umlaute
+  reader.readAsText(file, "utf-8");
 });
 
 clearDataBtn.addEventListener("click", () => {
@@ -74,6 +73,15 @@ function normalizePhone(raw) {
   if (/^\d+$/.test(p)) return "+" + p;
 
   return p;
+}
+
+function normalizeName(raw) {
+  if (!raw) return "";
+
+  return String(raw)
+    .replace(/\s*\([^)]*\)/g, "") // entfernt " (..)" inkl. Leerzeichen davor
+    .replace(/,.*$/, "") // entfernt alles ab Beistrich inkl. Beistrich
+    .trim();
 }
 
 function parseCsvLine(line, delimiter) {
@@ -116,29 +124,47 @@ function parseCsv(text) {
 
   if (!lines.length) return [];
 
-  const delimiter = lines[0].includes(";") ? ";" : ",";
+  const delimiter = detectDelimiter(lines[0]);
   const headers = parseCsvLine(lines[0], delimiter).map((h) => h.toLowerCase());
 
   const idxName = headers.findIndex((h) => h.startsWith("name"));
   const idxM1 = headers.findIndex((h) => h.includes("mobil 1") || h.includes("mobil1"));
   const idxM2 = headers.findIndex((h) => h.includes("mobil 2") || h.includes("mobil2"));
-
-  if (idxName === -1) throw new Error("Name fehlt");
+  const resolvedNameIdx = idxName >= 0 ? idxName : 0;
 
   const data = [];
+  const seen = new Set();
 
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCsvLine(lines[i], delimiter);
-    const name = cols[idxName]?.trim();
-    if (!name) continue;
+    const name = normalizeName(cols[resolvedNameIdx]) || "Unbekannt";
 
     const m1 = idxM1 >= 0 ? normalizePhone(cols[idxM1]) : "";
     const m2 = idxM2 >= 0 ? normalizePhone(cols[idxM2]) : "";
+    const dedupeKey = `${name}|${m1}|${m2}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
 
     data.push({ name, mobil1: m1, mobil2: m2 });
   }
 
   return data;
+}
+
+function detectDelimiter(headerLine) {
+  const candidates = [";", ",", "\t"];
+  let best = ";";
+  let highest = -1;
+
+  candidates.forEach((delimiter) => {
+    const count = headerLine.split(delimiter).length - 1;
+    if (count > highest) {
+      highest = count;
+      best = delimiter;
+    }
+  });
+
+  return best;
 }
 
 // ===== UI =====
@@ -206,8 +232,29 @@ function renderContacts() {
 }
 
 function makePhoneButton(number) {
-  const a = document.createElement("a");
-  a.href = "tel:" + number;
-  a.textContent = number;
-  return a;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = number;
+  btn.addEventListener("click", () => handlePhoneAction(number));
+  return btn;
+}
+
+function handlePhoneAction(number) {
+  const choice = window.prompt(
+    `Aktion für ${number}:\n1 = Anrufen\n2 = WhatsApp`,
+    "1"
+  );
+  if (choice === null) return;
+
+  if (choice.trim() === "2") {
+    const waNumber = toWhatsAppNumber(number);
+    window.open(`https://wa.me/${waNumber}`, "_blank", "noopener");
+    return;
+  }
+
+  window.location.href = "tel:" + number;
+}
+
+function toWhatsAppNumber(raw) {
+  return String(raw).replace(/[^\d]/g, "");
 }
